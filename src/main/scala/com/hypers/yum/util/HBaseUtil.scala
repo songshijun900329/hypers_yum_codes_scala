@@ -1,14 +1,13 @@
 package com.hypers.yum.util
 
 import org.apache.commons.lang3.StringUtils
-import org.apache.hadoop.hbase.{Cell, CellUtil, HBaseConfiguration, TableName}
-import org.apache.hadoop.hbase.client.{Connection, ConnectionFactory, Get, Put, Result, ResultScanner, Scan, Table}
+import org.apache.hadoop.hbase.client._
 import org.apache.hadoop.hbase.util.Bytes
+import org.apache.hadoop.hbase.{Cell, CellUtil, HBaseConfiguration, TableName}
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.io.IOException
 import java.util
-import scala.collection.JavaConversions._
 
 /**
  * @Author 4
@@ -248,6 +247,44 @@ object HBaseUtil {
     })
 
     put
+  }
+
+
+  /*
+   * @Date 2021/12/10
+   * @Description //TODO 根据给定rowkey删除HBASE表中对应的data
+   **/
+  def deleteHDataByRowKey(conn: Connection, hTable_name: String, hRowKey: String): Unit = {
+
+    val rowKey: Array[Byte] = Bytes.toBytes(hRowKey)
+
+    var hTable: Table = null
+
+    try {
+
+      // Instantiate an HTable object.
+      if (conn != null) {
+        hTable = conn.getTable(TableName.valueOf(hTable_name))
+      } else {
+        hTable = this.conn.getTable(TableName.valueOf(hTable_name))
+      }
+
+      // Instantiate an Delete object.
+      val delete: Delete = new Delete(rowKey)
+
+      // Submit a delete request.
+      hTable.delete(delete)
+
+    } catch {
+      case e: IOException => e.printStackTrace()
+    } finally {
+      if (hTable != null) try // Close the HTable object.
+        hTable.close()
+      catch {
+        case e: IOException => LOG.error("Close table failed ", e.printStackTrace())
+      }
+    } // finally's end
+
   }
 
 

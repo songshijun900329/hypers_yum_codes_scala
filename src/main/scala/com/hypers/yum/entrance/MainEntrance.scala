@@ -1,30 +1,19 @@
 package com.hypers.yum.entrance
 
 import com.hypers.yum.rich.sinks.MyHBaseSink
-import org.apache.flink.api.common.serialization.SimpleStringSchema
 import org.apache.flink.api.java.utils.ParameterTool
 import org.apache.flink.streaming.api.scala._
-import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hbase.client.{Connection, ConnectionFactory, Get, HTable, Put, Table}
-import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.{HBaseConfiguration, TableName}
-
-import java.io.File
-import java.util.Properties
 
 /**
  * @Author 4
  * @Description //TODO 程序入口
  * @Date 2021/12/9
- * PS:
- * hosts --> 10.16.3.100  master01.rose.cn    master01
- **/
+ *       PS:
+ *       hosts --> 10.16.3.100  master01.rose.cn    master01
+ * */
 object MainEntrance {
 
   def main(args: Array[String]): Unit = {
-
 
 
     /*
@@ -64,8 +53,6 @@ object MainEntrance {
      */
 
 
-
-
     /*
      3.指定数据相关的转换
      */
@@ -74,10 +61,10 @@ object MainEntrance {
     /*
      4.指定计算结果的存储位置
      */
-//    dataStream.print()
-    if ( true ) { // 逻辑判断决定sink对象的不同，自定义ricksink中(invoke)区分逻辑
+    //    dataStream.print()
+    if (true) { // 逻辑判断决定sink对象的不同，自定义ricksink中(invoke)区分逻辑
       dataStream.addSink(new MyHBaseSink("test_htbl"))
-    }else{
+    } else {
       dataStream.addSink(new MyHBaseSink("test_htbl"))
     }
 
