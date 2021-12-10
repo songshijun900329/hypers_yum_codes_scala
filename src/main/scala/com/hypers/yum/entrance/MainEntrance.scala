@@ -11,16 +11,20 @@ import org.apache.hadoop.hbase.client.{Connection, ConnectionFactory, Get, HTabl
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{HBaseConfiguration, TableName}
 
+import java.io.File
 import java.util.Properties
 
 /**
+ * @Author 4
+ * @Description //TODO 程序入口
+ * @Date 2021/12/9
  * PS:
  * hosts --> 10.16.3.100  master01.rose.cn    master01
- */
+ **/
 object MainEntrance {
 
-
   def main(args: Array[String]): Unit = {
+
 
 
     /*

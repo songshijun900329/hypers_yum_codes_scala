@@ -8,6 +8,11 @@ import org.apache.hadoop.hbase.{HBaseConfiguration, TableName}
 
 import java.io.IOException
 
+/**
+ * @Author 4
+ * @Description //TODO 自定义sink
+ * @Date 2021/12/9
+ **/
 class MyHBaseSink(hTable_name:String) extends RichSinkFunction[String] {
 
   val HTABLE_NAME = hTable_name
@@ -112,15 +117,6 @@ object MyHBaseSink {
   var hTableName: TableName = _
   var conf: org.apache.hadoop.conf.Configuration = _
   var conn: Connection = _
-
-
-
-  def generateRowKey( inerJsonObj: JSONObject,strMinute:String,strMeas_ID:String ):String = {
-
-
-    null
-
-  }
 }
 
 
@@ -135,28 +131,3 @@ object MyHBaseSink {
 
 
 
-//    // Instantiating Configuration class
-//    val conf: org.apache.hadoop.conf.Configuration = HBaseConfiguration.create
-//    val conn = ConnectionFactory.createConnection(conf)
-//
-//
-//
-//    // Instantiating HTable class
-//    val hTable:Table = conn.getTable(TableName.valueOf("test_htbl"))
-//
-//
-//    // Instantiating Get class
-//    val gdata = new Get(Bytes.toBytes("trw1"))
-//
-//    // Reading the data
-//    val result = hTable.get(gdata)
-//
-//    // Reading values from Result class object
-//    val value = result.getValue(Bytes.toBytes("labelId"),Bytes.toBytes("jsonData")) // family qualifier
-//
-//
-//    // Printing the values
-//    val strValue = Bytes.toString(value)
-//
-//    println("strHBASE-Value:\t" + strValue)
-//
