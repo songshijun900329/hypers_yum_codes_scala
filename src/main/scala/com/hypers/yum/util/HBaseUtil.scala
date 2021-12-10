@@ -2,11 +2,12 @@ package com.hypers.yum.util
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.hbase.{Cell, CellUtil, HBaseConfiguration, TableName}
-import org.apache.hadoop.hbase.client.{Connection, ConnectionFactory, Get, Result, ResultScanner, Scan, Table}
+import org.apache.hadoop.hbase.client.{Connection, ConnectionFactory, Get, Put, Result, ResultScanner, Scan, Table}
 import org.apache.hadoop.hbase.util.Bytes
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.io.IOException
+import java.util
 import scala.collection.JavaConversions._
 
 /**
@@ -29,9 +30,9 @@ object HBaseUtil {
   /*
    * @Description //TODO 生成rowkey的函数
    **/
-  def generateRowKey( strUserCode:String,strCrowdCode:String ):String = {
+  def generateRowKey(strUserCode: String, strCrowdCode: String): String = {
 
-    if ( StringUtils.isNotBlank(strCrowdCode) ) {
+    if (StringUtils.isNotBlank(strCrowdCode)) {
       Tools.makeMD5str(strUserCode) + strCrowdCode
     } else {
       Tools.makeMD5str(strUserCode)
@@ -44,7 +45,7 @@ object HBaseUtil {
    * @Description //TODO 扫hbase全表
    * @Date 2021/12/9
    **/
-  def getHTableScanList(hTable_name: String, hFamily: String, hQualifier: String): java.util.List[String] = {
+  def getHTableScanList(conn: Connection, hTable_name: String, hFamily: String, hQualifier: String): java.util.List[String] = {
     //    LOG.info("Entering getHTableScanList.")
 
     val valueList: java.util.List[String] = new java.util.ArrayList[String](500)
@@ -56,7 +57,11 @@ object HBaseUtil {
     try {
 
       // Create the hTable instance.
-      table = conn.getTable(TableName.valueOf(hTable_name))
+      if (conn != null) {
+        table = conn.getTable(TableName.valueOf(hTable_name))
+      } else {
+        table = this.conn.getTable(TableName.valueOf(hTable_name))
+      }
 
       // Instantiate a Scan object.
       val scan: Scan = new Scan
@@ -107,7 +112,7 @@ object HBaseUtil {
    * PS：
    * hbase若设置值存在版本为2，则一个rowkey对应2个cell
    */
-  def getHDataByRowKey(hTable_name: String, hFamily: String, hQualifier: String, hRowKey: String): java.util.List[String] = {
+  def getHDataByRowKey(conn: Connection, hTable_name: String, hFamily: String, hQualifier: String, hRowKey: String): java.util.List[String] = {
 
     // hbase若设置值存在版本为2，则一个rowkey对应2个cell
     val valueList: java.util.List[String] = new java.util.ArrayList[String](2)
@@ -124,7 +129,11 @@ object HBaseUtil {
     try {
 
       // Create the Configuration instance.
-      hTable = conn.getTable(TableName.valueOf(hTable_name))
+      if (conn != null) {
+        hTable = conn.getTable(TableName.valueOf(hTable_name))
+      } else {
+        hTable = this.conn.getTable(TableName.valueOf(hTable_name))
+      }
 
       // Instantiate a Get object.
       val get: Get = new Get(rowKey)
@@ -162,12 +171,84 @@ object HBaseUtil {
   /*
    * @Date 2021/12/10
    * @Description //TODO put data to hbase
-   **/
-  def putHData():Unit = {
+   * PS:
+   * MAP(qualifier,value)
+   */
+  def putHData(conn: Connection, hTable_name: String, hFamily: String, hRowKey: String, valueMap: Map[Array[Byte], Array[Byte]]): Unit = {
+
+    // Specify the column family name.
+    val familyName: Array[Byte] = Bytes.toBytes(hFamily)
+    // Specify the column name.
+    //    val qualifiers:Array[Array[Byte]] = Array(Bytes.toBytes(hQualifier))
+    // Specify the rowkey.
+    val rowkey: Array[Byte] = Bytes.toBytes(hRowKey)
+
+
+    var hTable: Table = null
+
+    try {
+
+      // Instantiate an HTable object.
+      if (conn != null) {
+        hTable = conn.getTable(TableName.valueOf(hTable_name))
+      } else {
+        hTable = this.conn.getTable(TableName.valueOf(hTable_name))
+      }
+
+      val puts: java.util.List[Put] = new util.ArrayList[Put]()
+
+      // Instantiate a Put object.
+      //      var valueMap:Map[Array[Byte],String] = Map()
+
+      //      for ( q <- qualifiers ) {
+      //        valueMap += (q -> value)
+      //      }
+      val put = putData(familyName, rowkey, valueMap)
+      puts.add(put)
+
+
+      // Submit a put request.
+      hTable.put(puts)
+
+    } catch {
+      case e: IOException => e.printStackTrace()
+    } finally {
+      if (hTable != null) try // Close the HTable object.
+        hTable.close()
+      catch {
+        case e: IOException => LOG.error("Close table failed ", e.printStackTrace())
+      }
+    } // finally's end
 
   }
 
+  private def putData(familyName: Array[Byte], qualifiers: Array[Array[Byte]], rowkey: String, data: java.util.List[String]): Put = {
+    val put: Put = new Put(Bytes.toBytes(rowkey))
 
+    for (index <- 0 to qualifiers.length) {
+      put.addColumn(familyName, qualifiers(index), Bytes.toBytes(data.get(index)))
+    }
+    put.addColumn(familyName, qualifiers(0), Bytes.toBytes(data.get(1)))
+    put.addColumn(familyName, qualifiers(1), Bytes.toBytes(data.get(2)))
+    put.addColumn(familyName, qualifiers(2), Bytes.toBytes(data.get(3)))
+    put.addColumn(familyName, qualifiers(3), Bytes.toBytes(data.get(4)))
+    put
+  }
+
+
+  /*
+   * @Date 2021/12/10
+   * @Description //TODO 为同一rowkey的一个列族的多列同时赋值，封装put对象
+   **/
+  private def putData(familyName: Array[Byte], rowkey: Array[Byte], dataMap: Map[Array[Byte], Array[Byte]]): Put = {
+    val put: Put = new Put(rowkey)
+
+    dataMap.keys.foreach(qualifier => {
+      put.addColumn(familyName, qualifier, dataMap(qualifier))
+    })
+
+    put
+  }
 
 
 } // object's end

@@ -75,8 +75,12 @@ object MainEntrance {
      4.指定计算结果的存储位置
      */
 //    dataStream.print()
+    if ( true ) { // 逻辑判断决定sink对象的不同，自定义ricksink中(invoke)区分逻辑
+      dataStream.addSink(new MyHBaseSink("test_htbl"))
+    }else{
+      dataStream.addSink(new MyHBaseSink("test_htbl"))
+    }
 
-    dataStream.addSink(new MyHBaseSink("test_htbl"))
 
 
 

@@ -1,19 +1,18 @@
 package com.hypers.yum.rich.sinks
 
-import cn.hutool.json.{JSONObject, JSONUtil}
+import cn.hutool.json.JSONUtil
+import com.hypers.yum.util.HBaseUtil
 import org.apache.flink.streaming.api.functions.sink.{RichSinkFunction, SinkFunction}
-import org.apache.hadoop.hbase.client.{Connection, ConnectionFactory, Put, Table}
+import org.apache.hadoop.hbase.client.{Connection, ConnectionFactory}
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{HBaseConfiguration, TableName}
-
-import java.io.IOException
 
 /**
  * @Author 4
  * @Description //TODO 自定义sink
  * @Date 2021/12/9
- **/
-class MyHBaseSink(hTable_name:String) extends RichSinkFunction[String] {
+ * */
+class MyHBaseSink(hTable_name: String) extends RichSinkFunction[String] {
 
   val HTABLE_NAME = hTable_name
 
@@ -22,10 +21,10 @@ class MyHBaseSink(hTable_name:String) extends RichSinkFunction[String] {
     super.open(parameters)
 
     MyHBaseSink.conf = HBaseConfiguration.create
-//    MyHBaseSink.conf.addResource(new Path("file:///Users/morning/Documents/work/work_for_hypers/yum百胜/code/yum_code_scala/src/main/resources/hbase-site.xml")) // HDFS PATH FILE
+    //    MyHBaseSink.conf.addResource(new Path("file:///Users/morning/Documents/work/work_for_hypers/yum百胜/code/yum_code_scala/src/main/resources/hbase-site.xml")) // HDFS PATH FILE
     MyHBaseSink.hTableName = TableName.valueOf(HTABLE_NAME)
     MyHBaseSink.conn = ConnectionFactory.createConnection(MyHBaseSink.conf)
-//    MyHBaseSink.conn = ConnectionFactory.createConnection(HBaseConfiguration.create(MyHBaseSink.conf))
+    //    MyHBaseSink.conn = ConnectionFactory.createConnection(HBaseConfiguration.create(MyHBaseSink.conf))
 
   }
 
@@ -33,69 +32,19 @@ class MyHBaseSink(hTable_name:String) extends RichSinkFunction[String] {
   override def invoke(value: String, context: SinkFunction.Context[_]): Unit = {
     //    super.invoke(value, context)
 
-    // Specify the column family name.
-    val familyName = Bytes.toBytes("label")
+    println("value:\t" + value)
 
-    var hTable: Table = null
-    try {
+    if (!JSONUtil.isJson(value)) return
 
-      println("value:\t" + value)
+    val jsonObject = JSONUtil.parseObj(value)
+    val strLabelID = jsonObject.getStr("labelId")
 
-      if( !JSONUtil.isJson(value) ) return
+    println("strLabelID:\t" + strLabelID)
 
-      val jsonObject = JSONUtil.parseObj(value)
-      val strLabelID = jsonObject.getStr("labelId")
+    var valueMap: Map[Array[Byte], Array[Byte]] = Map()
+    valueMap += (Bytes.toBytes("qualifier1") -> Bytes.toBytes("value1"))
 
-      println("strLabelID:\t" + strLabelID)
-
-
-      // Instantiate an HTable object.
-      hTable = MyHBaseSink.conn.getTable(MyHBaseSink.hTableName)
-
-//      val htable: HTable = new HTable(MyHBaseSink.conf, MyHBaseSink.hTableName)
-//      htable.setAutoFlushTo(false)
-
-      val puts: java.util.List[Put] = new java.util.ArrayList[Put](2)
-
-      for ( index <- 0 to 1 ){ // just until 55 minute,drop after 55 minute
-
-
-
-//        val strRowKey = MyHBaseSink.generateRowKey(inerJsonObj,strTimedList(index),strMeas_ID)
-        val strRowKey = strLabelID
-
-        // Instantiate a Put object.
-        var put: Put = new Put(Bytes.toBytes(strRowKey)) // rowKey
-        put.addColumn(familyName, Bytes.toBytes("jsonData"), Bytes.toBytes( value )) // family, qualifier, value
-        System.out.println("put:\t"+put)
-
-        puts.add(put)
-
-      } // for's end
-
-
-
-
-
-      // Submit a put request.
-      hTable.put(puts)
-
-//      htable.put(puts)
-//      htable.flushCommits()
-//      htable.close()
-
-
-      System.out.println("After_HBase_Put_putValues:\t" + puts.toString);
-
-    } catch {
-      case e: IOException => e.printStackTrace()
-    } finally {
-      if (hTable != null) try // Close the HTable object.
-        hTable.close()
-      catch {
-        case e: IOException => e.printStackTrace()
-      }
-    } // finally's end
+    HBaseUtil.putHData(MyHBaseSink.conn, hTable_name, "label", strLabelID, valueMap)
 
   }
 
