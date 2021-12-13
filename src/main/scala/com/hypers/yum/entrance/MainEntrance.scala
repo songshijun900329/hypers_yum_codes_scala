@@ -1,10 +1,17 @@
 package com.hypers.yum.entrance
 
+import cn.hutool.json.{JSONObject, JSONUtil}
 import com.hypers.yum.rich.sinks.MyHBaseSink
 import org.apache.flink.api.common.serialization.SimpleStringSchema
 import org.apache.flink.api.java.utils.ParameterTool
+import org.apache.flink.streaming.api.datastream.DataStreamSink
 import org.apache.flink.streaming.api.scala._
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer
+import com.hypers.yum.test.mock.MockObj
+
+import scala.collection.mutable.ListBuffer
+import java.util
+import scala.collection.mutable
 
 /**
  * @Author 4
@@ -34,7 +41,56 @@ object MainEntrance {
     /*
      2.加载/创建初始数据
      */
-    val dataStream: DataStream[String] = env.readTextFile(label_file_path)
+    //    val dataStream: DataStream[String] = env.readTextFile(label_file_path)
+    val kafkaStream: DataStream[String] = env.fromElements(MockObj.getLabelResult())
+    //    kafkaStream.print()
+
+
+    // hbase data
+    val crowdList: List[String] = MockObj.getCrowdRuleList()
+
+    println("start:")
+    crowdList.foreach(println)
+
+
+    //创建一个空的可变列表
+    var newCrowdListBuffer = new ListBuffer[String]
+
+    val newSteam: DataStream[Unit] = kafkaStream.map(
+      kafkaData => {
+        val kafkaJsonObject: JSONObject = JSONUtil.parseObj(kafkaData)
+        val orderTime: String = kafkaJsonObject.getJSONObject("matchInfo").getStr("orderTime")
+        //        println(orderTime)
+
+        val newCrowdList: List[String] = crowdList.filter(
+          item => {
+            val hbaseRowObj: JSONObject = JSONUtil.parseObj(item)
+            val startTime: String = hbaseRowObj.getStr("startTime")
+            val endTime: String = hbaseRowObj.getStr("endTime")
+            // 打印时间
+            //            println(startTime, endTime, orderTime)
+            // 打印逻辑的结果
+            //            println((orderTime >= startTime) && (orderTime <= endTime))
+            // 过滤掉不满足条件的数据
+            (orderTime >= startTime) && (orderTime <= endTime)
+          }
+        )
+        println("end:")
+        //        newCrowdList.foreach(println)
+
+        newCrowdListBuffer = newCrowdList.to[ListBuffer]
+        newCrowdListBuffer.foreach(println)
+      }
+    )
+
+    newCrowdListBuffer.foreach(println)
+
+
+
+
+
+
+
 
 
     /*
@@ -66,11 +122,11 @@ object MainEntrance {
      4.指定计算结果的存储位置
      */
     //    dataStream.print()
-    if (true) { // 逻辑判断决定sink对象的不同，自定义ricksink中(invoke)区分逻辑
-      dataStream.addSink(new MyHBaseSink("test_htbl"))
-    } else {
-      dataStream.addSink(new MyHBaseSink("test_htbl"))
-    }
+    //    if (true) { // 逻辑判断决定sink对象的不同，自定义ricksink中(invoke)区分逻辑
+    //      dataStream.addSink(new MyHBaseSink("test_htbl"))
+    //    } else {
+    //      dataStream.addSink(new MyHBaseSink("test_htbl"))
+    //    }
 
     /*
     val myKafkaProducer = new FlinkKafkaProducer[String](
@@ -81,8 +137,6 @@ object MainEntrance {
 
     dataStream.addSink(myKafkaProducer)
      */
-
-
 
 
     /*
