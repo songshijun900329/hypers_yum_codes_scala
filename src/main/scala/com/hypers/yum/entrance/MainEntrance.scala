@@ -1,8 +1,10 @@
 package com.hypers.yum.entrance
 
 import com.hypers.yum.rich.sinks.MyHBaseSink
+import org.apache.flink.api.common.serialization.SimpleStringSchema
 import org.apache.flink.api.java.utils.ParameterTool
 import org.apache.flink.streaming.api.scala._
+import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer
 
 /**
  * @Author 4
@@ -20,6 +22,8 @@ object MainEntrance {
      1.获取一个执行环境（execution environment）
      */
     val env = StreamExecutionEnvironment.getExecutionEnvironment
+    // checkpoint every 5000 msecs
+    env.enableCheckpointing(5000)
     // 设置并发度
     env.setParallelism(6)
     // 解析运行参数
@@ -67,6 +71,16 @@ object MainEntrance {
     } else {
       dataStream.addSink(new MyHBaseSink("test_htbl"))
     }
+
+    /*
+    val myKafkaProducer = new FlinkKafkaProducer[String](
+      "my-topic", // 目标 topic
+      new SimpleStringSchema(), // 序列化 schema
+      kafkaProps, // producer 配置
+      FlinkKafkaProducer.Semantic.EXACTLY_ONCE) // 容错
+
+    dataStream.addSink(myKafkaProducer)
+     */
 
 
 
