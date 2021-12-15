@@ -8,10 +8,14 @@ import org.apache.flink.streaming.api.datastream.DataStreamSink
 import org.apache.flink.streaming.api.scala._
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer
 import com.hypers.yum.test.mock.MockObj
+import com.hypers.yum.util.HBaseUtil._
+import com.hypers.yum.util.Tools.makeMD5str
+import org.apache.hadoop.hbase.client.Connection
 
 import scala.collection.mutable.ListBuffer
 import java.util
 import scala.collection.mutable
+
 
 /**
  * @Author 4
@@ -42,44 +46,124 @@ object MainEntrance {
      2.加载/创建初始数据
      */
     //    val dataStream: DataStream[String] = env.readTextFile(label_file_path)
+
+
+    /*
+    【步骤二】：
+    先检索出人群规则表（swift:dim_crowd_src）的所有数据，
+    遍历list，
+    list里的起止时间（startTime、endTime）
+    能覆盖kafka标签结果数据的订单时间（orderTime）的留下，不能覆盖的滤掉*/
+    //    input：
+    //（1）kafka数据（标签结果数据）
     val kafkaStream: DataStream[String] = env.fromElements(MockObj.getLabelResult())
     //    kafkaStream.print()
 
-
-    // hbase data
+    //（2）HBASE数据（人群规则数据）
     val crowdList: List[String] = MockObj.getCrowdRuleList()
-
-    println("start:")
+    println("hbase 全量 人群规则数据:")
     crowdList.foreach(println)
-
 
     //创建一个空的可变列表
     var newCrowdListBuffer = new ListBuffer[String]
 
-    val newSteam: DataStream[Unit] = kafkaStream.map(
+    kafkaStream.map(
       kafkaData => {
         val kafkaJsonObject: JSONObject = JSONUtil.parseObj(kafkaData)
         val orderTime: String = kafkaJsonObject.getJSONObject("matchInfo").getStr("orderTime")
-        //        println(orderTime)
+        val userCode: String = kafkaJsonObject.getJSONObject("matchInfo").getStr("userCode")
+        println(userCode)
 
+        // output：
+        //（1）人群规则数据LIST
         val newCrowdList: List[String] = crowdList.filter(
           item => {
             val hbaseRowObj: JSONObject = JSONUtil.parseObj(item)
             val startTime: String = hbaseRowObj.getStr("startTime")
             val endTime: String = hbaseRowObj.getStr("endTime")
-            // 打印时间
-            //            println(startTime, endTime, orderTime)
-            // 打印逻辑的结果
-            //            println((orderTime >= startTime) && (orderTime <= endTime))
-            // 过滤掉不满足条件的数据
+
             (orderTime >= startTime) && (orderTime <= endTime)
           }
         )
-        println("end:")
-        //        newCrowdList.foreach(println)
 
-        newCrowdListBuffer = newCrowdList.to[ListBuffer]
-        newCrowdListBuffer.foreach(println)
+        /*
+        【步骤三】：
+        rowkey规则：
+        遍历[步骤二]输出的人群规则LIST，对list中每一条人群规则的JSON字符串，解析出其中的"crowdCode"，
+        再对kafka当前这一帧数据中的"userCode"，按照：MD5(userCode) + _ + crowdCode 规则进行拼接，
+        形成rowkey
+         */
+        //        input：
+        // （1）[步骤二的output]人群规则LIST
+        val finalCrowList: List[String] = newCrowdList.filter(
+          item => {
+            val hbaseRowObj: JSONObject = JSONUtil.parseObj(item)
+            val crowdCode: String = hbaseRowObj.getStr("crowdCode")
+            // （2）按指定rowkey，从人群结果Hbase表(swift:dws_crowd_sink)中查出来的数据
+            val rowkey: String = makeMD5str(userCode) + "_" + crowdCode
+            //            val rowkey1: String = generateRowKey(userCode, crowdCode)
+            //            println(rowkey)
+
+            val connectionToList: Connection => util.List[String] = getHDataByRowKey(_, "dws_crowd_sink", "swift", "", rowkey)
+            connectionToList != null
+          }
+        )
+
+        //        output：
+        //（1）人群规则LIST（去重后的list）
+        finalCrowList
+
+        /*
+        【步骤四】：
+        rowkey规则：
+        对kafka中标签结果JSON数据进行解析，得到"userCode"，对其取MD5作为rowkey
+
+        使用该rk查询HBASE表(swift:dws_label_sink)获得该用户的所有标签结果的LIST
+         */
+
+        //        input：
+        //（1）kafka中标签结果数据
+        val rowKey: String = makeMD5str(userCode)
+        //（2）HBASE中标签结果数据
+        val finalLabelList: Connection => util.List[String] = getHDataByRowKey(_, "dws_label_sink", "swift", "", rowKey)
+        //        output：
+        //（1）"userCode"对应的标签结果数据LIST（Map[usercode,List[String]]）
+        //        val result4: (String, Connection => util.List[String]) = (userCode, labelList)
+
+        /*
+        【步骤五】：
+        过滤规则：
+        外层遍历[步骤三的输出]人群规则LIST中的每个人群规则，对标签结果列表，进行预过滤：
+        内层遍历[步骤四的输出]标签结果LIST中的每个标签结果，
+        选取标签结果数据："orderTime"
+        在人群规则数据："startTime" 和 "endTime"
+        时间范围内的标签结果数据，留下，不在时间范围内的标签结果数据被舍弃，
+        从而生成过滤后的标签结果LIST
+         */
+
+        //        input：
+        //（1）[步骤三的输出]人群规则LIST finalCrowList
+        //（2）[步骤四的输出]标签结果LIST result4nen
+        finalCrowList.foreach(
+          item => {
+            val hbaseRowObj: JSONObject = JSONUtil.parseObj(item)
+            val startTime: String = hbaseRowObj.getStr("startTime")
+            val endTime: String = hbaseRowObj.getStr("endTime")
+
+            val labelListResult: List[Connection => util.List[String]] = List(finalLabelList).filter(
+              elem => {
+                val labelJsonObject: JSONObject = JSONUtil.parseObj(elem)
+                val labelOrderTime: String = labelJsonObject.getJSONObject("matchInfo").getStr("orderTime")
+
+                (orderTime >= startTime) && (orderTime <= endTime)
+              }
+            )
+            //        output：
+            //（1）标签结果LIST（过滤后的list）
+            labelListResult
+          }
+        )
+
       }
     )
 
@@ -126,7 +210,7 @@ object MainEntrance {
     //      dataStream.addSink(new MyHBaseSink("test_htbl"))
     //    } else {
     //      dataStream.addSink(new MyHBaseSink("test_htbl"))
-    //    }
+    //    }ou
 
     /*
     val myKafkaProducer = new FlinkKafkaProducer[String](
