@@ -64,8 +64,6 @@ object MainEntrance {
     println("hbase 全量 人群规则数据:")
     crowdList.foreach(println)
 
-    //创建一个空的可变列表
-    var newCrowdListBuffer = new ListBuffer[String]
 
     kafkaStream.map(
       kafkaData => {
@@ -143,7 +141,8 @@ object MainEntrance {
 
         //        input：
         //（1）[步骤三的输出]人群规则LIST finalCrowList
-        //（2）[步骤四的输出]标签结果LIST result4nen
+        //（2）[步骤四的输出]标签结果LIST result4
+        //创建一个空的可变列表
         finalCrowList.foreach(
           item => {
             val hbaseRowObj: JSONObject = JSONUtil.parseObj(item)
@@ -167,7 +166,6 @@ object MainEntrance {
       }
     )
 
-    newCrowdListBuffer.foreach(println)
 
 
 
