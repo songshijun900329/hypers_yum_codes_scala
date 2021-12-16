@@ -106,6 +106,74 @@ object HBaseUtil {
 
 
   /*
+   * @Author 4
+   * @Date 2021/12/16
+   * @Description //TODO 根据rowkey前缀扫HBASE表
+   **/
+  def getHTableScanScopeList(conn: Connection, preRowKey: String, hTable_name: String, hFamily: String, hQualifier: String): java.util.List[String] = {
+    //    LOG.info("Entering getHTableScanList.")
+
+    val valueList: java.util.List[String] = new java.util.ArrayList[String](500)
+
+    var table: Table = null
+    // Instantiate a ResultScanner object.
+    var rScanner: ResultScanner = null
+
+    try {
+
+      // Create the hTable instance.
+      if (conn != null) {
+        table = conn.getTable(TableName.valueOf(hTable_name))
+      } else {
+        table = this.conn.getTable(TableName.valueOf(hTable_name))
+      }
+
+      // Instantiate a Scan object.
+      val scan: Scan = new Scan
+      scan.addColumn(Bytes.toBytes(hFamily), Bytes.toBytes(hQualifier))
+      scan.setStartRow(Bytes.toBytes(preRowKey))
+      scan.setStopRow(Bytes.toBytes(preRowKey))
+
+      // Set the cache size.
+      scan.setCaching(1000)
+
+      // Submit a scan request.
+      rScanner = table.getScanner(scan)
+
+      // Print query results.
+      var r: Result = rScanner.next
+      while (r != null) {
+        for (cell: Cell <- r.rawCells) {
+          LOG.info("{}:{},{},{}",
+            Bytes.toString(CellUtil.cloneRow(cell)),
+            Bytes.toString(CellUtil.cloneFamily(cell)),
+            Bytes.toString(CellUtil.cloneQualifier(cell)),
+            Bytes.toString(CellUtil.cloneValue(cell))
+          )
+          valueList.add(Bytes.toString(CellUtil.cloneValue(cell)))
+        } // for's end
+        r = rScanner.next
+      } // while's end
+
+
+    } catch {
+      case e: IOException => e.printStackTrace()
+    } finally {
+      if (rScanner != null) { // Close the scanner object.
+        rScanner.close
+      }
+      if (table != null) try { // Close the HTable object.
+        table.close
+      } catch {
+        case e: IOException =>
+          LOG.error("Close table failed ", e.printStackTrace())
+      }
+    } // finally's end
+    valueList
+  }
+
+
+  /*
    * @Description //TODO 根据rowkey获取value
    * @Date 2021/12/9
    * PS：
