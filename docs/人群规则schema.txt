@@ -15,7 +15,7 @@
     }
   ],
   "crowdRule": {--人群规则：人群所涉及的标签及其与或关系结构体
-    "logic": "and",--与或关系,表示subRules中各元素的关系
+    "logic": "and",--与或关系,表示subRules中各元素的关系（取值有"and"、"or"、null）
     "subRules": [--子标签列表,subRules的每个元素都是crowdRule
       {
         "logic": null,--
