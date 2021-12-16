@@ -73,23 +73,50 @@ output：
 时间范围内的标签结果数据，留下，不在时间范围内的标签结果数据被舍弃，
 从而生成过滤后的标签结果LIST
 
+PS:
+步骤五的逻辑看似和步骤二是一样的，但是步骤二过滤的是"人群规则LIST"，而这个步骤五过滤的是"标签结果LIST"，
+所以，逻辑一样，但是逻辑作用的LIST是不一样的。
+
 input：
 （1）[步骤三的输出]人群规则LIST
 （2）[步骤四的输出]标签结果LIST
 output：
-（1）标签结果LIST（过滤后的list）
+（1）标签结果LIST（过滤后的list）--> 数据结构为：Map(crowcode,LIST(标签结果))
+
+PS：
+这里的map.size == "人群规则LIST".size，
+也就是每个"人群规则LIST"中的element，都可封装为一个JsonObject，封装为Map的key
 
 ------------------------------------------------------------------------------------------------------------------------
 
 【步骤六】：
 转化逻辑：
+Map(crowcode,LIST(标签结果))
 
+1）人群结果 = 人群规则一些key + kafka中的标签结果的matchinfo；
+2）遍历Map中的每个key，也就是每条人群规则，根据人群规则作用在key对应的value（标签结果LIST）所返回的true/false，来决定当前遍历到的map的key是否留下，
+如果为true，map的key（该条人群规则）留下，否则过滤掉；
+3）如何根据人群规则判断true/false呢？
+"subRules"的叶子节点中：
+{
+"logic": null,--
+"subRules": [],
+"labelId": "label-1"
+}
+"labelId"在"标签结果LIST"中的"labelId"中存在对应值，则该json对象为true，否则为false。
+而没一个叶子节点都计算完true/false后，按照"logic"的取值是"and"或"or"，对所有叶子节点的真假返回值进行取"与"/"或"运算，得到最后的true/false值。
+最后的与或逻辑后获得的true/false值来决定当前MAP的key是否留下还是过滤掉；
+4）如果留下，则该人群结果取一部分key值+从当前kafka的标签结果的matchinfo中取一些值=拼成该人群规则对应的人群结果；
+5）没一个被留下的map的key最后都拼出了一条人群结果，封装成一个"人群结果LIST"
+6）"人群结果LIST" --> sink到HBASE
 
 
 input：
-（1）[步骤五的输出]标签结果LIST
+（1）[步骤五的输出]Map(crowcode,LIST(标签结果))
 output：
 （1）人群结果LIST（根据人群规则的与或逻辑进行转化）
+
+
 
 
 
