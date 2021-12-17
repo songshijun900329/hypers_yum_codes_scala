@@ -65,15 +65,16 @@ object MainEntrance {
 
 
     kafkaStream.map(
-      kafkaData => {
-        val kafkaJsonObject: JSONObject = JSONUtil.parseObj(kafkaData)
+      kafkaLabelData => {
+        val kafkaJsonObject: JSONObject = JSONUtil.parseObj(kafkaLabelData)
         val orderTime: String = kafkaJsonObject.getJSONObject("matchInfo").getStr("orderTime")
         val userCode: String = kafkaJsonObject.getJSONObject("matchInfo").getStr("userCode")
-        println(userCode)
+        //        println(userCode)
 
         // output：
         //（1）人群规则数据LIST
-        val newCrowdList: List[String] = crowdList.filter(
+
+        val afterTimeFilteringCrowdList: List[String] = crowdList.filter(
           item => {
             val hbaseRowObj: JSONObject = JSONUtil.parseObj(item)
             val startTime: String = hbaseRowObj.getStr("startTime")
@@ -89,10 +90,12 @@ object MainEntrance {
         遍历[步骤二]输出的人群规则LIST，对list中每一条人群规则的JSON字符串，解析出其中的"crowdCode"，
         再对kafka当前这一帧数据中的"userCode"，按照：MD5(userCode) + _ + crowdCode 规则进行拼接，
         形成rowkey
+        去[步骤二]输出的人群规则list做去重：
+        人群规则list - Hbase中查出来的有数的
          */
         //        input：
         // （1）[步骤二的output]人群规则LIST
-        val finalCrowList: List[String] = newCrowdList.filter(
+        val afterHbaseFilteringCrowdList: List[String] = afterTimeFilteringCrowdList.filter(
           item => {
             val hbaseRowObj: JSONObject = JSONUtil.parseObj(item)
             val crowdCode: String = hbaseRowObj.getStr("crowdCode")
@@ -101,31 +104,31 @@ object MainEntrance {
             //            val rowkey1: String = generateRowKey(userCode, crowdCode)
             //            println(rowkey)
 
-            val connectionToList: Connection => util.List[String] = getHDataByRowKey(_, "dws_crowd_sink", "swift", "", rowkey)
-            connectionToList != null
+            val connectionToList: ListBuffer[String] = getHDataByRowKey(null, "swift:dws_crowd_sink", "f1", "crowd", rowkey)
+            // 在habse查不到结果的人群规则保留
+            connectionToList.isEmpty
           }
         )
 
         //        output：
         //（1）人群规则LIST（去重后的list）
-        finalCrowList
+        afterHbaseFilteringCrowdList
 
         /*
         【步骤四】：
         rowkey规则：
         对kafka中标签结果JSON数据进行解析，得到"userCode"，对其取MD5作为rowkey
-
         使用该rk查询HBASE表(swift:dws_label_sink)获得该用户的所有标签结果的LIST
          */
 
         //        input：
         //（1）kafka中标签结果数据
         val rowKey: String = makeMD5str(userCode)
-        //（2）HBASE中标签结果数据
-        val finalLabelList: Connection => util.List[String] = getHDataByRowKey(_, "dws_label_sink", "swift", "", rowKey)
+        //（2）HBASE中标签结果数据,根据前缀查询
+        val hbaseLabelList: ListBuffer[String] = getHDataByRowKey(null, "swift:dws_label_sink", "f1", "label", rowKey)
         //        output：
         //（1）"userCode"对应的标签结果数据LIST（Map[usercode,List[String]]）
-        //        val result4: (String, Connection => util.List[String]) = (userCode, labelList)
+        hbaseLabelList
 
         /*
         【步骤五】：
@@ -139,28 +142,39 @@ object MainEntrance {
          */
 
         //        input：
-        //（1）[步骤三的输出]人群规则LIST finalCrowList
-        //（2）[步骤四的输出]标签结果LIST result4
-        //创建一个空的可变列表
-        finalCrowList.foreach(
-          item => {
-            val hbaseRowObj: JSONObject = JSONUtil.parseObj(item)
-            val startTime: String = hbaseRowObj.getStr("startTime")
-            val endTime: String = hbaseRowObj.getStr("endTime")
+        //（1）[步骤三的输出]人群规则LIST
+        afterHbaseFilteringCrowdList
+        //（2）[步骤四的输出]标签结果LIST
+        hbaseLabelList
 
-            val labelListResult: List[Connection => util.List[String]] = List(finalLabelList).filter(
+        //创建一个 Map 收集满足时间筛选的 Map(crowcode,LIST(标签结果))
+        val finalCrowdLabelMap: mutable.Map[String, ListBuffer[String]] = mutable.Map[String, ListBuffer[String]]()
+        //        val afterTimeFilteringHbaseLabelList: ListBuffer[String] = ListBuffer[String]()
+
+        afterHbaseFilteringCrowdList.foreach(
+          crowd => {
+            val hbaseRowObj: JSONObject = JSONUtil.parseObj(crowd)
+            val crowdStartTime: String = hbaseRowObj.getStr("startTime")
+            val crowdEndTime: String = hbaseRowObj.getStr("endTime")
+
+            //创建一个 ListBuffer 收集满足时间筛选的 hbaseLabelList
+            val tmpLabelListBuffer: ListBuffer[String] = hbaseLabelList.filter(
               elem => {
                 val labelJsonObject: JSONObject = JSONUtil.parseObj(elem)
                 val labelOrderTime: String = labelJsonObject.getJSONObject("matchInfo").getStr("orderTime")
 
-                (orderTime >= startTime) && (orderTime <= endTime)
+                (labelOrderTime >= crowdStartTime) && (orderTime <= crowdEndTime)
               }
             )
-            //        output：
-            //（1）标签结果LIST（过滤后的list）
-            labelListResult
+            //            afterTimeFilteringHbaseLabelList ++= tmpLabelListBuffer
+            //            val tmpCrowdLabelMap: mutable.Map[ListBuffer[String], ListBuffer[String]] =
+            //            finalCrowdLabelMap ++= mutable.Map(item,tmpLabelListBuffer)
+            finalCrowdLabelMap += (crowd -> tmpLabelListBuffer)
           }
         )
+        //output：
+        //（1）标签结果LIST（过滤后的list）--> 数据结构为：Map(crowcode,LIST(标签结果))
+        finalCrowdLabelMap
 
       }
     )

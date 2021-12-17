@@ -8,6 +8,8 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import java.io.IOException
 import java.util
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 /**
  * @Author 4
@@ -44,10 +46,11 @@ object HBaseUtil {
    * @Description //TODO 扫hbase全表
    * @Date 2021/12/9
    **/
-  def getHTableScanList(conn: Connection, hTable_name: String, hFamily: String, hQualifier: String): java.util.List[String] = {
+  def getHTableScanList(conn: Connection, hTable_name: String, hFamily: String, hQualifier: String): ListBuffer[String] = {
     //    LOG.info("Entering getHTableScanList.")
 
-    val valueList: java.util.List[String] = new java.util.ArrayList[String](500)
+//    val valueList: java.util.List[String] = new java.util.ArrayList[String](500)
+    val valueList: ListBuffer[String] = ListBuffer[String]()
 
     var table: Table = null
     // Instantiate a ResultScanner object.
@@ -82,7 +85,7 @@ object HBaseUtil {
             Bytes.toString(CellUtil.cloneQualifier(cell)),
             Bytes.toString(CellUtil.cloneValue(cell))
           )
-          valueList.add(Bytes.toString(CellUtil.cloneValue(cell)))
+          valueList.append(Bytes.toString(CellUtil.cloneValue(cell)))
         } // for's end
         r = rScanner.next
       } // while's end
@@ -111,10 +114,12 @@ object HBaseUtil {
    * PS：
    * hbase若设置值存在版本为2，则一个rowkey对应2个cell
    */
-  def getHDataByRowKey(conn: Connection, hTable_name: String, hFamily: String, hQualifier: String, hRowKey: String): java.util.List[String] = {
+  def getHDataByRowKey(conn: Connection, hTable_name: String, hFamily: String, hQualifier: String, hRowKey: String): ListBuffer[String] = {
 
     // hbase若设置值存在版本为2，则一个rowkey对应2个cell
-    val valueList: java.util.List[String] = new java.util.ArrayList[String](2)
+//    val valueList: java.util.List[String] = new java.util.ArrayList[String](2)
+    val valueList: ListBuffer[String] = ListBuffer[String]()
+    valueList.append()
 
     // Specify the column family name.
     val familyName: Array[Byte] = Bytes.toBytes(hFamily)
@@ -151,7 +156,7 @@ object HBaseUtil {
           Bytes.toString(CellUtil.cloneFamily(cell)),
           Bytes.toString(CellUtil.cloneQualifier(cell)),
           Bytes.toString(CellUtil.cloneValue(cell)))
-        valueList.add(Bytes.toString(CellUtil.cloneValue(cell)))
+        valueList.append(Bytes.toString(CellUtil.cloneValue(cell)))
       } // for's end
 
     } catch {
