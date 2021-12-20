@@ -1,6 +1,6 @@
 package com.hypers.yum.entrance
 
-import cn.hutool.json.{JSONObject, JSONUtil}
+import cn.hutool.json.{JSONArray, JSONObject, JSONUtil}
 import com.hypers.yum.rich.sinks.MyHBaseSink
 import org.apache.flink.api.common.serialization.SimpleStringSchema
 import org.apache.flink.api.java.utils.ParameterTool
@@ -176,18 +176,60 @@ object MainEntrance {
         //（1）标签结果LIST（过滤后的list）--> 数据结构为：Map(crowcode,LIST(标签结果))
         finalCrowdLabelMap
 
+        /*      【步骤六】：
+        转化逻辑：
+        Map(crowcode,LIST(标签结果))
+
+        1）人群结果 = 人群规则一些key + kafka中的标签结果的matchinfo；
+        2）遍历Map中的每个key，也就是每条人群规则，根据人群规则作用在key对应的value（标签结果LIST）所返回的true/false，来决定当前遍历到的map的key是否留下，
+        如果为true，map的key（该条人群规则）留下，否则过滤掉；
+        3）如何根据人群规则判断true/false呢？
+        "subRules"的叶子节点中：
+        {
+        "logic": null,--
+        "subRules": [],
+        "labelId": "label-1"
+        }
+        "labelId"在"标签结果LIST"中的"labelId"中存在对应值，则该json对象为true，否则为false。
+        而没一个叶子节点都计算完true/false后，按照"logic"的取值是"and"或"or"，对所有叶子节点的真假返回值进行取"与"/"或"运算，得到最后的true/false值。
+        最后的与或逻辑后获得的true/false值来决定当前MAP的key是否留下还是过滤掉；
+        */
+
+
+        //input：
+        //（1）[步骤五的输出]Map(crowcode,LIST(标签结果))
+        finalCrowdLabelMap.filter(
+          mapElem => {
+            val crowdElem: String = mapElem._1
+            val labelList: ListBuffer[String] = mapElem._2
+
+            judgeSingleLogic(labelList: ListBuffer[String], crowdElem: String)
+          }
+        ).map(
+          mapElem => {
+            //4）如果留下，则该人群结果取一部分key值+从当前kafka的标签结果的matchinfo中取一些值=拼成该人群规则对应的人群结果；
+            // 来自hbase 通过逻辑计算的<人群规则> 的字段
+            val crowdElem: String = mapElem._1
+
+            // 来自kafka 的<标签结果> 的字段
+            kafkaLabelData
+
+
+            // 转换为Json
+            ""
+          }
+        )
+
+
+        //5）没一个被留下的map的key最后都拼出了一条人群结果，封装成一个"人群结果LIST"
+
+
+        //output：
+        //（1）人群结果LIST（根据人群规则的与或逻辑进行转化）
+
+
       }
     )
-
-
-
-
-
-
-
-
-
-
     /*
     val kafkaProps = new Properties()
     kafkaProps.setProperty("bootstrap.servers", "10.16.3.100:9092")
@@ -212,13 +254,9 @@ object MainEntrance {
 
     val dataStream = env.addSource(flinkKafkaConsumer)
      */
-
-
     /*
      3.指定数据相关的转换
      */
-
-
     /*
      4.指定计算结果的存储位置
      */
@@ -228,7 +266,6 @@ object MainEntrance {
     //    } else {
     //      dataStream.addSink(new MyHBaseSink("test_htbl"))
     //    }
-
     /*
     val myKafkaProducer = new FlinkKafkaProducer[String](
       "my-topic", // 目标 topic
@@ -238,14 +275,66 @@ object MainEntrance {
 
     dataStream.addSink(myKafkaProducer)
      */
-
-
     /*
      5.触发程序执行
      */
     env.execute("test")
+  }
 
+  //  def getRule(crowdRule: String): String = {
+  //    val hbaseRowObj: JSONObject = JSONUtil.parseObj(crowdRule)
+  //    val startTime: String = hbaseRowObj.getStr("startTime")
+  //    ""
+  //  }
 
+  def getLogicType(crowdRule: String): String = {
+    val hbaseRowObj: JSONObject = JSONUtil.parseObj(crowdRule)
+    val logic: String = hbaseRowObj.getStr("logic")
+    logic
+  }
+
+  def getSubRules(crowdRule: String): JSONArray = {
+    val hbaseRowObj: JSONObject = JSONUtil.parseObj(crowdRule)
+    val subRules: JSONArray = hbaseRowObj.getJSONArray("subRules")
+    subRules
+  }
+
+  def getLabelId(crowdRule: String): String = {
+    val hbaseRowObj: JSONObject = JSONUtil.parseObj(crowdRule)
+    val labelId: String = hbaseRowObj.getStr("labelId")
+    labelId
+  }
+
+  //  递归实现:              Map(crowcode,LIST(标签结果))
+  def judgeSingleLogic(labelList: ListBuffer[String], crowdSrc: String): Boolean = {
+
+    val logic: String = getLogicType(crowdSrc)
+    val subRules: JSONArray = getSubRules(crowdSrc)
+
+    if (logic != null && subRules.size() > 0) { // 如果是逻辑结构，调用此方法本身，判断每个subRule是否满足，并用与或关联
+      if (logic == "AND") {
+        // judgeSingleLogic(labelList, subRules.forEach) //all be true
+        for (i <- 0 until subRules.size()) {
+          val rules: String = subRules.get(i).toString
+          //          if (judgeSingleLogic(labelList, rules == false)) return false
+          if (!judgeSingleLogic(labelList, rules)) return false
+        }
+        true
+      }
+      else if (logic == "OR") {
+        //judgeSingleLogic(labelList, subRule.foreach) // at least one be true
+        for (i <- 0 until subRules.size()) {
+          val rules: String = subRules.get(i).toString
+          if (judgeSingleLogic(labelList, rules)) return true
+        }
+        false
+      }
+      else {
+        false
+      }
+    } else { // 如果是规则结构，判断labelList中是否包含此结构
+      if (labelList.contains(getLabelId(crowdSrc))) true else false
+    }
   }
 
 

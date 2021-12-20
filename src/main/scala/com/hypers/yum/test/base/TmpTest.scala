@@ -37,6 +37,8 @@ object TmpTest {
 
     aMap.foreach(println)
 
+    if("ss" != "ds ")
+
 
   }
 }
