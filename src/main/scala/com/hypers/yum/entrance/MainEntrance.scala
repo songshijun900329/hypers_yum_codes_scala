@@ -25,7 +25,8 @@ import scala.collection.mutable
  * */
 object MainEntrance {
 
-  def main(args: Array[String]): Unit = {
+
+  def main1(args: Array[String]): Unit = {
 
 
     /*
@@ -197,8 +198,8 @@ object MainEntrance {
 
 
         //input：
-        //（1）[步骤五的输出]Map(crowcode,LIST(标签结果))
-        finalCrowdLabelMap.filter(
+        //                                      （1）[步骤五的输出]Map(crowcode,LIST(标签结果))
+        val crowResultdList: mutable.Iterable[String] = finalCrowdLabelMap.filter(
           mapElem => {
             val crowdElem: String = mapElem._1
             val labelList: ListBuffer[String] = mapElem._2
@@ -210,24 +211,69 @@ object MainEntrance {
             //4）如果留下，则该人群结果取一部分key值+从当前kafka的标签结果的matchinfo中取一些值=拼成该人群规则对应的人群结果；
             // 来自hbase 通过逻辑计算的<人群规则> 的字段
             val crowdElem: String = mapElem._1
+            val hbaseRowObj: JSONObject = JSONUtil.parseObj(crowdElem)
+            val crowdCode: String = hbaseRowObj.getStr("crowdCode")
+            val crowdName: String = hbaseRowObj.getStr("crowdName")
+            val brand: String = hbaseRowObj.getStr("brand")
+            val startTime: String = hbaseRowObj.getStr("startTime")
+            val startTimeFmt: String = hbaseRowObj.getStr("startTimeFmt")
+            val endTime: String = hbaseRowObj.getStr("endTime")
+            val endTimeFmt: String = hbaseRowObj.getStr("endTimeFmt")
+            //            val topic: JSONArray = hbaseRowObj.getJSONArray("topic")
+            val labelList: String = hbaseRowObj.getStr("labelList")
+            val topic: String = hbaseRowObj.getStr("topic")
+            val activityStartTime: String = hbaseRowObj.getStr("activityStartTime")
+            val activityEndTime: String = hbaseRowObj.getStr("activityEndTime")
+            val createTime: String = hbaseRowObj.getStr("createTime")
+            val updateTime: String = hbaseRowObj.getStr("updateTime")
 
             // 来自kafka 的<标签结果> 的字段
-            kafkaLabelData
+            val kafkaJsonObj: JSONObject = JSONUtil.parseObj(kafkaLabelData)
+            val matchInfoJsonObj: JSONObject = kafkaJsonObj.getJSONObject("matchInfo")
+            val labelMatchId: String = matchInfoJsonObj.getStr("labelMatchId")
+            val crowdMatchId: String = labelMatchId.split("_")(0) + "_" + crowdCode
+            val userCode: String = matchInfoJsonObj.getStr("userCode")
+            val mobile: String = matchInfoJsonObj.getStr("mobile")
+            val orderId: String = matchInfoJsonObj.getStr("orderId")
+            val orderTime: String = matchInfoJsonObj.getStr("orderTime")
+            val orderTimeFmt: String = matchInfoJsonObj.getStr("orderTimeFmt")
+            val flowTime: String = matchInfoJsonObj.getStr("flowTime")
+
+            val matchInfobody: JSONObject = new JSONObject(true)
+            matchInfobody.putOnce("labelMatchId", labelMatchId)
+            matchInfobody.putOnce("crowdMatchId", crowdMatchId)
+            matchInfobody.putOnce("userCode", userCode)
+            matchInfobody.putOnce("mobile", mobile)
+            matchInfobody.putOnce("orderId", orderId)
+            matchInfobody.putOnce("orderTime", orderTime)
+            matchInfobody.putOnce("orderTimeFmt", orderTimeFmt)
+            matchInfobody.putOnce("flowTime", flowTime)
 
 
             // 转换为Json
-            ""
+            val crowdbody: JSONObject = new JSONObject(true)
+            crowdbody.putOnce("crowdCode", crowdCode)
+            crowdbody.putOnce("crowdName", crowdName)
+            crowdbody.putOnce("brand", brand)
+            crowdbody.putOnce("startTime", startTime)
+            crowdbody.putOnce("startTimeFmt", startTimeFmt)
+            crowdbody.putOnce("endTime", endTime)
+            crowdbody.putOnce("endTimeFmt", endTimeFmt)
+            crowdbody.putOnce("labelList", labelList)
+            crowdbody.putOnce("topic", topic)
+            crowdbody.putOnce("activityStartTime", activityStartTime)
+            crowdbody.putOnce("activityEndTime", activityEndTime)
+            crowdbody.putOnce("createTime", createTime)
+            crowdbody.putOnce("updateTime", updateTime)
+            crowdbody.putOnce("matchInfo", matchInfobody)
+            //5）没一个被留下的map的key最后都拼出了一条人群结果，封装成一个"人群结果LIST"
+            crowdbody.toString
           }
         )
 
-
-        //5）没一个被留下的map的key最后都拼出了一条人群结果，封装成一个"人群结果LIST"
-
-
         //output：
         //（1）人群结果LIST（根据人群规则的与或逻辑进行转化）
-
-
+        crowResultdList
       }
     )
     /*
@@ -312,7 +358,7 @@ object MainEntrance {
     val subRules: JSONArray = getSubRules(crowdSrc)
 
     if (logic != null && subRules.size() > 0) { // 如果是逻辑结构，调用此方法本身，判断每个subRule是否满足，并用与或关联
-      if (logic == "AND") {
+      if (logic == "and") {
         // judgeSingleLogic(labelList, subRules.forEach) //all be true
         for (i <- 0 until subRules.size()) {
           val rules: String = subRules.get(i).toString
@@ -321,7 +367,7 @@ object MainEntrance {
         }
         true
       }
-      else if (logic == "OR") {
+      else if (logic == "or") {
         //judgeSingleLogic(labelList, subRule.foreach) // at least one be true
         for (i <- 0 until subRules.size()) {
           val rules: String = subRules.get(i).toString
@@ -337,5 +383,44 @@ object MainEntrance {
     }
   }
 
+  def main(args: Array[String]): Unit = {
+    /*
+  "crowdRule": {
+    "logic": "and",
+    "subRules": [
+      {
+        "logic": null,
+        "subRules": [],
+        "labelId": "label-1"
+      },
+      {
+        "logic": null,
+        "subRules": [],
+        "labelId": "label-2"
+      }
+    ],
+    "labelId": null
+  }
+     */
+    val crowdElem: String = "{\"crowdCode\":\"crowdCode1\",\"crowdName\":\"人群1\",\"brand\":\"PH\",\"startTime\":1604160000001,\"startTimeFmt\":\"2020-11-01 00:00:00.000\",\"endTime\":1636473600000,\"endTimeFmt\":\"2021-11-10 00:00:00.000\",\"labelList\":[{\"labelId\":\"label-1\"},{\"labelId\":\"label-2\"}],\"crowdRule\":{\"logic\":\"and\",\"subRules\":[{\"logic\":null,\"subRules\":[],\"labelId\":\"label-1\"},{\"logic\":null,\"subRules\":[],\"labelId\":\"label-2\"}],\"labelId\":null},\"topic\":\"crowdTopic1\",\"activityStartTime\":\"2021-10-30 06:00:00.000\",\"activityEndTime\":\"2021-11-30 23:00:00.000\",\"createTime\":\"2021-10-21 17:00:21.000\",\"updateTime\":\"2021-10-21 17:00:21.000\"}"
+    println("人群规则:")
+    println(crowdElem)
+
+
+    /*
+    label-1
+    label-2
+     */
+    val labelList: ListBuffer[String] = ListBuffer(
+      "{\"labelId\":\"label-1\",\"labelName\":\"首次购买早餐\",\"labelDesc\":\"首次购买早餐的描述\",\"labelType\":\"order\",\"brand\":\"PH\",\"startTime\":1604160000000,\"startTimeFmt\":\"2020-11-01 00:00:00\",\"endTime\":1636473600000,\"endTimeFmt\":\"2021-11-10 00:00:00\",\"updateTime\":1635696000000,\"updateTimeFmt\":\"2021-11-01 00:00:00\",\"updateFrequency\":\"daily\",\"matchInfo\":{\"labelMatchId\":\"572F88AE748BB1467453A9903954006E_label-001\",\"userCode\":\"123213e24a3\",\"mobile\":\"18818881888\",\"orderId\":\"1637659077353167020\",\"orderTime\":1604160000000,\"orderTimeFmt\":\"2020-11-01 00:00:00.000\",\"flowTime\":{\"orderTransTimeFmt\":\"2020-11-01 00:00:00.000\",\"orderTransSinkTimeFmt\":\"2020-11-01 00:00:00.000\",\"labelProcessTimeFmt\":\"2020-11-01 00:00:00.000\"}}}",
+      "{\"labelId\":\"label-2\",\"labelName\":\"首次购买早餐\",\"labelDesc\":\"首次购买早餐的描述\",\"labelType\":\"order\",\"brand\":\"PH\",\"startTime\":1604160000000,\"startTimeFmt\":\"2020-11-01 00:00:00\",\"endTime\":1636473600000,\"endTimeFmt\":\"2021-11-10 00:00:00\",\"updateTime\":1635696000000,\"updateTimeFmt\":\"2021-11-01 00:00:00\",\"updateFrequency\":\"daily\",\"matchInfo\":{\"labelMatchId\":\"572F88AE748BB1467453A9903954006E_label-001\",\"userCode\":\"123213e24a3\",\"mobile\":\"18818881888\",\"orderId\":\"1637659077353167020\",\"orderTime\":1604160000000,\"orderTimeFmt\":\"2020-11-01 00:00:00.000\",\"flowTime\":{\"orderTransTimeFmt\":\"2020-11-01 00:00:00.000\",\"orderTransSinkTimeFmt\":\"2020-11-01 00:00:00.000\",\"labelProcessTimeFmt\":\"2020-11-01 00:00:00.000\"}}}"
+    )
+    println("标签列表:")
+    labelList.foreach(println)
+
+
+    val flag: Boolean = judgeSingleLogic(labelList: ListBuffer[String], crowdElem: String)
+    println(flag)
+  }
 
 }
