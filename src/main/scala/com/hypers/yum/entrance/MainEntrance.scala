@@ -26,7 +26,7 @@ import scala.collection.mutable
 object MainEntrance {
 
 
-  def main1(args: Array[String]): Unit = {
+  def main(args: Array[String]): Unit = {
 
 
     /*
@@ -65,7 +65,7 @@ object MainEntrance {
     crowdList.foreach(println)
 
 
-    kafkaStream.map(
+    val crowdResultSteam: DataStream[mutable.Iterable[String]] = kafkaStream.map(
       kafkaLabelData => {
         val kafkaJsonObject: JSONObject = JSONUtil.parseObj(kafkaLabelData)
         val orderTime: String = kafkaJsonObject.getJSONObject("matchInfo").getStr("orderTime")
@@ -204,6 +204,16 @@ object MainEntrance {
             val crowdElem: String = mapElem._1
             val labelList: ListBuffer[String] = mapElem._2
 
+            val labeIDlList: ListBuffer[String] = ListBuffer()
+            labelList.foreach(
+              item => {
+                val label: String = getLabelId(item)
+                labelList += label
+              }
+            )
+            //            println("标签ID列表:")
+            //            labeIDlList.foreach(println)
+
             judgeSingleLogic(labelList: ListBuffer[String], crowdElem: String)
           }
         ).map(
@@ -306,12 +316,12 @@ object MainEntrance {
     /*
      4.指定计算结果的存储位置
      */
-    //    dataStream.print()
-    //    if (true) { // 逻辑判断决定sink对象的不同，自定义ricksink中(invoke)区分逻辑
-    //      dataStream.addSink(new MyHBaseSink("test_htbl"))
-    //    } else {
-    //      dataStream.addSink(new MyHBaseSink("test_htbl"))
-    //    }
+        dataStream.print()
+        if (true) { // 逻辑判断决定sink对象的不同，自定义ricksink中(invoke)区分逻辑
+          dataStream.addSink(new MyHBaseSink("test_htbl"))
+        } else {
+          dataStream.addSink(new MyHBaseSink("test_htbl"))
+        }
     /*
     val myKafkaProducer = new FlinkKafkaProducer[String](
       "my-topic", // 目标 topic
@@ -333,29 +343,35 @@ object MainEntrance {
   //    ""
   //  }
 
+  // 根据<人群规则>获取<logic>(与或关系)
   def getLogicType(crowdRule: String): String = {
     val hbaseRowObj: JSONObject = JSONUtil.parseObj(crowdRule)
     val logic: String = hbaseRowObj.getStr("logic")
     logic
   }
 
+  // 根据<人群规则>获取<subRules>
   def getSubRules(crowdRule: String): JSONArray = {
     val hbaseRowObj: JSONObject = JSONUtil.parseObj(crowdRule)
     val subRules: JSONArray = hbaseRowObj.getJSONArray("subRules")
     subRules
   }
 
-  def getLabelId(crowdRule: String): String = {
-    val hbaseRowObj: JSONObject = JSONUtil.parseObj(crowdRule)
+  // 根据<标签结果>获取<labelId>
+  def getLabelId(LabelData: String): String = {
+    val hbaseRowObj: JSONObject = JSONUtil.parseObj(LabelData)
     val labelId: String = hbaseRowObj.getStr("labelId")
     labelId
   }
 
   //  递归实现:              Map(crowcode,LIST(标签结果))
-  def judgeSingleLogic(labelList: ListBuffer[String], crowdSrc: String): Boolean = {
+  def judgeSingleLogic(labelIdList: ListBuffer[String], crowdRule: String): Boolean = {
 
-    val logic: String = getLogicType(crowdSrc)
-    val subRules: JSONArray = getSubRules(crowdSrc)
+    val logic: String = getLogicType(crowdRule)
+    println(logic)
+    val subRules: JSONArray = getSubRules(crowdRule)
+    println(subRules)
+    println(subRules.size())
 
     if (logic != null && subRules.size() > 0) { // 如果是逻辑结构，调用此方法本身，判断每个subRule是否满足，并用与或关联
       if (logic == "and") {
@@ -363,7 +379,7 @@ object MainEntrance {
         for (i <- 0 until subRules.size()) {
           val rules: String = subRules.get(i).toString
           //          if (judgeSingleLogic(labelList, rules == false)) return false
-          if (!judgeSingleLogic(labelList, rules)) return false
+          if (!judgeSingleLogic(labelIdList, rules)) return false
         }
         true
       }
@@ -371,7 +387,7 @@ object MainEntrance {
         //judgeSingleLogic(labelList, subRule.foreach) // at least one be true
         for (i <- 0 until subRules.size()) {
           val rules: String = subRules.get(i).toString
-          if (judgeSingleLogic(labelList, rules)) return true
+          if (judgeSingleLogic(labelIdList, rules)) return true
         }
         false
       }
@@ -379,11 +395,12 @@ object MainEntrance {
         false
       }
     } else { // 如果是规则结构，判断labelList中是否包含此结构
-      if (labelList.contains(getLabelId(crowdSrc))) true else false
+      if (labelIdList.contains(getLabelId(crowdRule))) true else false
     }
   }
 
-  def main(args: Array[String]): Unit = {
+  // 测试步骤六的递归方法
+  def main1(args: Array[String]): Unit = {
     /*
   "crowdRule": {
     "logic": "and",
@@ -402,24 +419,33 @@ object MainEntrance {
     "labelId": null
   }
      */
-    val crowdElem: String = "{\"crowdCode\":\"crowdCode1\",\"crowdName\":\"人群1\",\"brand\":\"PH\",\"startTime\":1604160000001,\"startTimeFmt\":\"2020-11-01 00:00:00.000\",\"endTime\":1636473600000,\"endTimeFmt\":\"2021-11-10 00:00:00.000\",\"labelList\":[{\"labelId\":\"label-1\"},{\"labelId\":\"label-2\"}],\"crowdRule\":{\"logic\":\"and\",\"subRules\":[{\"logic\":null,\"subRules\":[],\"labelId\":\"label-1\"},{\"logic\":null,\"subRules\":[],\"labelId\":\"label-2\"}],\"labelId\":null},\"topic\":\"crowdTopic1\",\"activityStartTime\":\"2021-10-30 06:00:00.000\",\"activityEndTime\":\"2021-11-30 23:00:00.000\",\"createTime\":\"2021-10-21 17:00:21.000\",\"updateTime\":\"2021-10-21 17:00:21.000\"}"
-    println("人群规则:")
-    println(crowdElem)
+    val crowdSrc: String = "{\"crowdCode\":\"crowdCode1\",\"crowdName\":\"人群1\",\"brand\":\"PH\",\"startTime\":1604160000001,\"startTimeFmt\":\"2020-11-01 00:00:00.000\",\"endTime\":1636473600000,\"endTimeFmt\":\"2021-11-10 00:00:00.000\",\"labelList\":[{\"labelId\":\"label-1\"},{\"labelId\":\"label-2\"}],\"crowdRule\":{\"logic\":\"and\",\"subRules\":[{\"logic\":null,\"subRules\":[],\"labelId\":\"label-1\"},{\"logic\":null,\"subRules\":[],\"labelId\":\"label-2\"}],\"labelId\":null},\"topic\":\"crowdTopic1\",\"activityStartTime\":\"2021-10-30 06:00:00.000\",\"activityEndTime\":\"2021-11-30 23:00:00.000\",\"createTime\":\"2021-10-21 17:00:21.000\",\"updateTime\":\"2021-10-21 17:00:21.000\"}"
+    val crowdElem: JSONObject = JSONUtil.parseObj(crowdSrc)
+    val crowdRule: String = crowdElem.getStr("crowdRule")
+    println("人群规则crowdRule:")
+    println(crowdRule)
 
 
     /*
     label-1
     label-2
      */
-    val labelList: ListBuffer[String] = ListBuffer(
+    val labelJsonList: ListBuffer[String] = ListBuffer(
       "{\"labelId\":\"label-1\",\"labelName\":\"首次购买早餐\",\"labelDesc\":\"首次购买早餐的描述\",\"labelType\":\"order\",\"brand\":\"PH\",\"startTime\":1604160000000,\"startTimeFmt\":\"2020-11-01 00:00:00\",\"endTime\":1636473600000,\"endTimeFmt\":\"2021-11-10 00:00:00\",\"updateTime\":1635696000000,\"updateTimeFmt\":\"2021-11-01 00:00:00\",\"updateFrequency\":\"daily\",\"matchInfo\":{\"labelMatchId\":\"572F88AE748BB1467453A9903954006E_label-001\",\"userCode\":\"123213e24a3\",\"mobile\":\"18818881888\",\"orderId\":\"1637659077353167020\",\"orderTime\":1604160000000,\"orderTimeFmt\":\"2020-11-01 00:00:00.000\",\"flowTime\":{\"orderTransTimeFmt\":\"2020-11-01 00:00:00.000\",\"orderTransSinkTimeFmt\":\"2020-11-01 00:00:00.000\",\"labelProcessTimeFmt\":\"2020-11-01 00:00:00.000\"}}}",
       "{\"labelId\":\"label-2\",\"labelName\":\"首次购买早餐\",\"labelDesc\":\"首次购买早餐的描述\",\"labelType\":\"order\",\"brand\":\"PH\",\"startTime\":1604160000000,\"startTimeFmt\":\"2020-11-01 00:00:00\",\"endTime\":1636473600000,\"endTimeFmt\":\"2021-11-10 00:00:00\",\"updateTime\":1635696000000,\"updateTimeFmt\":\"2021-11-01 00:00:00\",\"updateFrequency\":\"daily\",\"matchInfo\":{\"labelMatchId\":\"572F88AE748BB1467453A9903954006E_label-001\",\"userCode\":\"123213e24a3\",\"mobile\":\"18818881888\",\"orderId\":\"1637659077353167020\",\"orderTime\":1604160000000,\"orderTimeFmt\":\"2020-11-01 00:00:00.000\",\"flowTime\":{\"orderTransTimeFmt\":\"2020-11-01 00:00:00.000\",\"orderTransSinkTimeFmt\":\"2020-11-01 00:00:00.000\",\"labelProcessTimeFmt\":\"2020-11-01 00:00:00.000\"}}}"
     )
-    println("标签列表:")
-    labelList.foreach(println)
+    val labelIdList: ListBuffer[String] = ListBuffer()
+    labelJsonList.foreach(
+      item => {
+        val label: String = getLabelId(item)
+        labelIdList += label
+      }
+    )
+    println("标签ID列表:")
+    labelIdList.foreach(println)
 
 
-    val flag: Boolean = judgeSingleLogic(labelList: ListBuffer[String], crowdElem: String)
+    val flag: Boolean = judgeSingleLogic(labelIdList: ListBuffer[String], crowdRule)
     println(flag)
   }
 
