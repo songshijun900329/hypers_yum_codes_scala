@@ -49,7 +49,7 @@ object HBaseUtil {
   def getHTableScanList(conn: Connection, hTable_name: String, hFamily: String, hQualifier: String): ListBuffer[String] = {
     //    LOG.info("Entering getHTableScanList.")
 
-//    val valueList: java.util.List[String] = new java.util.ArrayList[String](500)
+    //    val valueList: java.util.List[String] = new java.util.ArrayList[String](500)
     val valueList: ListBuffer[String] = ListBuffer[String]()
 
     var table: Table = null
@@ -113,11 +113,11 @@ object HBaseUtil {
    * @Date 2021/12/16
    * @Description //TODO 根据rowkey前缀扫HBASE表
    **/
-  def getHTableScanScopeList(conn: Connection, preRowKey: String, hTable_name: String, hFamily: String, hQualifier: String): java.util.List[String] = {
+  def getHTableScanScopeList(conn: Connection, preRowKey: String, hTable_name: String, hFamily: String, hQualifier: String): ListBuffer[String] = {
     //    LOG.info("Entering getHTableScanList.")
 
-    val valueList: java.util.List[String] = new java.util.ArrayList[String](500)
-
+    //    val valueList: java.util.List[String] = new java.util.ArrayList[String](500)
+    val valueList: ListBuffer[String] = ListBuffer[String]()
     var table: Table = null
     // Instantiate a ResultScanner object.
     var rScanner: ResultScanner = null
@@ -153,7 +153,8 @@ object HBaseUtil {
             Bytes.toString(CellUtil.cloneQualifier(cell)),
             Bytes.toString(CellUtil.cloneValue(cell))
           )
-          valueList.add(Bytes.toString(CellUtil.cloneValue(cell)))
+          //          valueList.add(Bytes.toString(CellUtil.cloneValue(cell)))
+          valueList.append(Bytes.toString(CellUtil.cloneValue(cell)))
         } // for's end
         r = rScanner.next
       } // while's end
@@ -185,7 +186,7 @@ object HBaseUtil {
   def getHDataByRowKey(conn: Connection, hTable_name: String, hFamily: String, hQualifier: String, hRowKey: String): ListBuffer[String] = {
 
     // hbase若设置值存在版本为2，则一个rowkey对应2个cell
-//    val valueList: java.util.List[String] = new java.util.ArrayList[String](2)
+    //    val valueList: java.util.List[String] = new java.util.ArrayList[String](2)
     val valueList: ListBuffer[String] = ListBuffer[String]()
     valueList.append()
 

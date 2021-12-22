@@ -65,7 +65,7 @@ object MainEntrance {
     crowdList.foreach(println)
 
 
-    val crowdResultSteam: DataStream[mutable.Iterable[String]] = kafkaStream.map(
+    val crowdResultSteam: DataStream[List[String]] = kafkaStream.map(
       kafkaLabelData => {
         val kafkaJsonObject: JSONObject = JSONUtil.parseObj(kafkaLabelData)
         val orderTime: String = kafkaJsonObject.getJSONObject("matchInfo").getStr("orderTime")
@@ -126,7 +126,7 @@ object MainEntrance {
         //（1）kafka中标签结果数据
         val rowKey: String = makeMD5str(userCode)
         //（2）HBASE中标签结果数据,根据前缀查询
-        val hbaseLabelList: ListBuffer[String] = getHDataByRowKey(null, "swift:dws_label_sink", "f1", "label", rowKey)
+        val hbaseLabelList: ListBuffer[String] = getHTableScanScopeList(null, "swift:dws_label_sink", "f1", "label", rowKey)
         //        output：
         //（1）"userCode"对应的标签结果数据LIST（Map[usercode,List[String]]）
         hbaseLabelList
@@ -199,7 +199,7 @@ object MainEntrance {
 
         //input：
         //                                      （1）[步骤五的输出]Map(crowcode,LIST(标签结果))
-        val crowResultdList: mutable.Iterable[String] = finalCrowdLabelMap.filter(
+        val crowdResultdIter: mutable.Iterable[String] = finalCrowdLabelMap.filter(
           mapElem => {
             val crowdElem: String = mapElem._1
             val labelList: ListBuffer[String] = mapElem._2
@@ -283,45 +283,48 @@ object MainEntrance {
 
         //output：
         //（1）人群结果LIST（根据人群规则的与或逻辑进行转化）
-        crowResultdList
+        val crowdResultList: List[String] = crowdResultdIter.toList
+        crowdResultList
       }
     )
     /*
-    val kafkaProps = new Properties()
-    kafkaProps.setProperty("bootstrap.servers", "10.16.3.100:9092")
-    kafkaProps.setProperty("group.id", "test_grouplabel")
+        val kafkaProps = new Properties()
+        kafkaProps.setProperty("bootstrap.servers", "10.16.3.100:9092")
+        kafkaProps.setProperty("group.id", "test_grouplabel")
 
-//    println("topic:\t" + paraTool.get("topic"))
+    //    println("topic:\t" + paraTool.get("topic"))
 
-    val flinkKafkaConsumer = new FlinkKafkaConsumer[java.lang.String](
-      paraTool.get("topic"),
-      // 这里不使用JsonDeserializationSchema，
-      // 由于 flinkKafkaConsumer 的容错能力，
-      // 在损坏的消息上失败作业将使 flinkKafkaConsumer 尝试再次反序列化消息.
-      // 因此，如果反序列化仍然失败，则 flinkKafkaConsumer 将在该损坏的消息上进入不间断重启和失败的循环
-      new SimpleStringSchema,
-      //        paraTool.getProperties
-      kafkaProps
-    )
+        val flinkKafkaConsumer = new FlinkKafkaConsumer[java.lang.String](
+          paraTool.get("topic"),
+          // 这里不使用JsonDeserializationSchema，
+          // 由于 flinkKafkaConsumer 的容错能力，
+          // 在损坏的消息上失败作业将使 flinkKafkaConsumer 尝试再次反序列化消息.
+          // 因此，如果反序列化仍然失败，则 flinkKafkaConsumer 将在该损坏的消息上进入不间断重启和失败的循环
+          new SimpleStringSchema,
+          //        paraTool.getProperties
+          kafkaProps
+        )
 
 
-    // 测试时使用，尽可能从最早的记录开始消费，在该模式下，Kafka 中的 committed offset 将被忽略，不会用作起始位置
-    flinkKafkaConsumer.setStartFromEarliest()
+        // 测试时使用，尽可能从最早的记录开始消费，在该模式下，Kafka 中的 committed offset 将被忽略，不会用作起始位置
+        flinkKafkaConsumer.setStartFromEarliest()
 
-    val dataStream = env.addSource(flinkKafkaConsumer)
-     */
+        val dataStream = env.addSource(flinkKafkaConsumer)
+         */
     /*
      3.指定数据相关的转换
      */
     /*
      4.指定计算结果的存储位置
      */
-        dataStream.print()
-        if (true) { // 逻辑判断决定sink对象的不同，自定义ricksink中(invoke)区分逻辑
-          dataStream.addSink(new MyHBaseSink("test_htbl"))
-        } else {
-          dataStream.addSink(new MyHBaseSink("test_htbl"))
-        }
+    //    val crowdResultSteam: DataStream[List[String]]
+    val crowdOneResult: DataStream[String] = crowdResultSteam.flatMap(x => x)
+    crowdResultSteam.print()
+    if (true) { // 逻辑判断决定sink对象的不同，自定义ricksink中(invoke)区分逻辑
+      crowdOneResult.addSink(new MyHBaseSink("test_htbl"))
+    } else {
+      crowdOneResult.addSink(new MyHBaseSink("test_htbl"))
+    }
     /*
     val myKafkaProducer = new FlinkKafkaProducer[String](
       "my-topic", // 目标 topic
